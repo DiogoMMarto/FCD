@@ -2,27 +2,18 @@ import json
 import time
 import requests
 import os
-import pprint
 import re
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from neo4j_driver import add_page_to_neo4j , driver
+from neo4j_driver import add_all_pages_to_neo4h, driver
 
 # deterministic hash
 def my_hash(s: str):
     h = hashlib.sha256(s.encode('utf-8')).hexdigest()
     return h
 
-def open_site(url:str) -> tuple[str, str]:
-    """
-    Opens a given URL and reads its content. If the content has already been retrieved, it is read from a cache file.
-    The cache file is saved in .cache directory with the name of the url encoded in hex.
-    If the content is not in the cache, the function sends a GET request for the given URL and saves the response to the cache.
-    :param url: The URL to open
-    :return: A tuple with the content of the URL and the path of the cache file
-    :raises Exception: If the GET request fails
-    """
+def open_site(url:str,cached:bool = True) -> tuple[str, str]:
     hash_url = my_hash(url)
     file_path = '.cache/' + hash_url + ".json"
     if os.path.exists(file_path):
@@ -31,8 +22,9 @@ def open_site(url:str) -> tuple[str, str]:
     response = requests.get(url)
 
     if response.status_code == 200:        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(response.text)
+        if cached:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(response.text)
         return response.text , file_path
     else:
         raise Exception(f"Failed to open site: {response.status_code}")
@@ -94,8 +86,14 @@ def parse_big_file(file_path:str) -> dict:
 
 url_pattern = r"https?://[^\s\"'>]+"
 url_pattern2 = r"href=\".*\""
-def extract_urls(content:str) -> list[str]:
-    return re.findall(url_pattern, content) + [ x.replace("href=\"", "").replace("\"", "") for x in re.findall(url_pattern2, content)]
+def extract_urls(content:str) -> set[str]:
+    r = set(re.findall(url_pattern, content))
+    for x in set(re.findall(url_pattern2, content)):
+        x2 = x.replace("href=\"", "").replace("\"", "")
+        if len(x2) > 0 and x2[0] == "/":
+            x2 = "https://www.publico.pt" + x2
+        r.add(x2)
+    return r
 
 def process_site(url,d) -> tuple[str,list[int]]:
     url , path = open_site(url)
@@ -142,19 +140,20 @@ def process_filtered_sites(d):
     return results  # Return list of processed data entries
 
 def main():
-    _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
-    l = parse_big_file(path)
-    with open(".cache/filtered.json", 'w') as f:
-        f.write(pprint.pformat(l))
-    l2 = process_filtered_sites(l)
-    with open(".cache/filtered_and_connections.json", 'w') as f:
-        f.write(pprint.pformat(l2))
-    print()
-    for i,item in enumerate(l2):
-        print(f"\r{i}/{len(l2)}", end="")
-        add_page_to_neo4j(item)
+    # _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
+    # l = parse_big_file(path)
+    # with open(".cache/filtered.json", 'w') as f:
+    #     f.write(pprint.pformat(l))
+    # l2 = process_filtered_sites(l)
+    # with open(".cache/filtered_and_connections.json", 'w') as f:
+    #     f.write(json.dumps(l2))
+    with open(".cache/filtered_and_connections.json", 'r') as f:
+        s = f.read()
+        l2 = json.loads(s.replace("'","\""))
+    print("Inserting data into Neo4j...")
+    add_all_pages_to_neo4h(l2)
     driver.close()
-    print("Done")
+    print("\nDone")
 
 if __name__ == "__main__":
     if not os.path.exists(".cache"):

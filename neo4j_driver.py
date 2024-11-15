@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from neo4j import GraphDatabase
 
 uri = "bolt://localhost:7687"
@@ -35,10 +36,22 @@ def insert_connections(tx, source_number, target_numbers):
         # Execute the query for each connection
         tx.run(query, source_number=source_number, target_number=target_number)
 
-def add_page_to_neo4j(node_data):
-    with driver.session() as session:
+def add_page_to_neo4j(node_data,_driver = None):
+    if _driver is None:
+        _driver = driver
+    with _driver.session() as session:
         # Insert the node
-        session.write_transaction(insert_node, node_data)
+        session.execute_write(insert_node, node_data)
         # Insert its connections (relationships)
-        session.write_transaction(insert_connections, node_data['number'], node_data['connections'])
+        session.execute_write(insert_connections, node_data['number'], node_data['connections'])
 
+def add_all_pages_to_neo4h(nodes_data, num_workers=16):
+    i = 0
+    divisions = 1000
+    for k in range(0, len(nodes_data) / divisions):
+        with driver.session() as session:
+            for node_data in nodes_data[k * divisions:(k + 1) * divisions]:
+                i += 1
+                session.execute_write(insert_node, node_data)
+                session.execute_write(insert_connections, node_data['number'], node_data['connections'])
+                print(f"\r{i}/{len(nodes_data)}", end="")
