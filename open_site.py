@@ -1,4 +1,5 @@
 import json
+import pprint
 import time
 import requests
 import os
@@ -96,7 +97,7 @@ def extract_urls(content:str) -> set[str]:
     return r
 
 def process_site(url,d) -> tuple[str,list[int]]:
-    url , path = open_site(url)
+    url , path = open_site(url,cached=False)
     urls = extract_urls(url)
     urls2 = set()
     for url in urls:
@@ -140,13 +141,13 @@ def process_filtered_sites(d):
     return results  # Return list of processed data entries
 
 def main():
-    # _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
-    # l = parse_big_file(path)
-    # with open(".cache/filtered.json", 'w') as f:
-    #     f.write(pprint.pformat(l))
-    # l2 = process_filtered_sites(l)
-    # with open(".cache/filtered_and_connections.json", 'w') as f:
-    #     f.write(json.dumps(l2))
+    _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
+    l = parse_big_file(path)
+    with open(".cache/filtered.json", 'w') as f:
+        f.write(pprint.pformat(l))
+    l2 = process_filtered_sites(l)
+    with open(".cache/filtered_and_connections.json", 'w') as f:
+        f.write(json.dumps(l2))
     with open(".cache/filtered_and_connections.json", 'r') as f:
         s = f.read()
         l2 = json.loads(s.replace("'","\""))
