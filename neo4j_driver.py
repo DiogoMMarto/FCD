@@ -4,6 +4,7 @@ from neo4j import GraphDatabase
 uri = "bolt://localhost:7687"
 username = "neo4j"
 password = "example123456789"
+database = "neo4j"
 
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
@@ -45,13 +46,9 @@ def add_page_to_neo4j(node_data,_driver = None):
         # Insert its connections (relationships)
         session.execute_write(insert_connections, node_data['number'], node_data['connections'])
 
-def add_all_pages_to_neo4h(nodes_data, num_workers=16):
-    i = 0
-    divisions = 1000
-    for k in range(0, len(nodes_data) / divisions):
-        with driver.session() as session:
-            for node_data in nodes_data[k * divisions:(k + 1) * divisions]:
-                i += 1
-                session.execute_write(insert_node, node_data)
-                session.execute_write(insert_connections, node_data['number'], node_data['connections'])
-                print(f"\r{i}/{len(nodes_data)}", end="")
+def add_all_pages_to_neo4h(nodes_data):
+    with driver.session(database=database) as session:
+        for node_data in nodes_data:
+            session.execute_write(insert_node, node_data,database=database)
+        for node_data in nodes_data:
+            session.execute_write(insert_connections, node_data['number'], node_data['connections'],database=database)

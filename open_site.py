@@ -36,8 +36,8 @@ def read_cache(url):
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
 
-
 def parse_url(url_original:str) -> tuple[str,str,str,str]:
+    # TODO: CHECK IF things after ? change page content
     url = url_original.replace("https://www.publico.pt/", "")
     url_split = url.split("/")
     if len(url_split) > 6:
@@ -49,7 +49,8 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
     title = url_split[5]
     title_split = title.split("?")
     if len(title_split) > 1:
-        raise Exception(f"Invalid url: {url}")
+        pass
+        # raise Exception(f"Invalid url: {url}")
     title = title_split[0]
     url = "https://www.publico.pt/" + url_split[0] + "/" + url_split[1] + "/" + url_split[2] + "/" + url_split[3] + "/" + url_split[4] + "/" + title
     return url, date, category, title
@@ -57,8 +58,11 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
 def parse_big_file(file_path:str) -> dict:
     filter_larger = {}
     with open(file_path, 'r') as f:
-        i = 0
+        n = 0
         for line in f:
+            n = n + 1
+            if n % 1000 == 0:
+                print(f"\r{n}", end="")
             line = line.strip()
             json_obj = json.loads(line)
             if json_obj['mime'] != "text/html" or json_obj['status'] != "200":
@@ -67,7 +71,6 @@ def parse_big_file(file_path:str) -> dict:
                 url , date, category, title = parse_url(json_obj['url'])
             except Exception as e:
                 continue
-            i += 1
             timestamp = int(json_obj['timestamp'])
             cur_time =  int(filter_larger.get(url, {"timestamp": 0})["timestamp"])
             if timestamp > cur_time:
@@ -76,36 +79,39 @@ def parse_big_file(file_path:str) -> dict:
                                       "mime": json_obj['mime'],
                                       "status": json_obj['status'],
                                       "url": json_obj['url'],
-                                    #   "url": url,
+                                      "url_normal": url,
                                       "date": date,
                                       "category": category,
                                       "title": title,
-                                      "number": i,
+                                      "number": n,
                                       "timestamp": timestamp
                                     }
+    print()
     return filter_larger
 
+
 url_pattern = r"https?://[^\s\"'>]+"
-url_pattern2 = r"href=\".*\""
 def extract_urls(content:str) -> set[str]:
+    # TODO: CHECK IF URL_2 IS NEEDED
+    # url_pattern2 = r"href=\".*\""
+    # for x in set(re.findall(url_pattern2, content)):
+    #     x2 = x.replace("href=\"", "").replace("\"", "")
+    #     if len(x2) > 0 and x2[0] == "/":
+    #         x2 = "https://www.publico.pt" + x2
+    #     r.add(x2)
     r = set(re.findall(url_pattern, content))
-    for x in set(re.findall(url_pattern2, content)):
-        x2 = x.replace("href=\"", "").replace("\"", "")
-        if len(x2) > 0 and x2[0] == "/":
-            x2 = "https://www.publico.pt" + x2
-        r.add(x2)
     return r
 
 def process_site(url,d) -> tuple[str,list[int]]:
-    url , path = open_site(url,cached=False)
-    urls = extract_urls(url)
-    urls2 = set()
+    url_file , path = open_site(url)
+    urls = extract_urls(url_file)
+    urls2 = list()
     for url in urls:
         try:
             r = parse_url(url)
         except Exception as e:
             continue
-        urls2.add(r[0])
+        urls2.append(r[0])
     connections = []
     for url in urls2:
         if url in d:
@@ -142,9 +148,11 @@ def process_filtered_sites(d):
 
 def main():
     _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
+
     l = parse_big_file(path)
     with open(".cache/filtered.json", 'w') as f:
         f.write(pprint.pformat(l))
+
     l2 = process_filtered_sites(l)
     with open(".cache/filtered_and_connections.json", 'w') as f:
         f.write(json.dumps(l2))
