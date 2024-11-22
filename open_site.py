@@ -49,8 +49,7 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
     title = url_split[5]
     title_split = title.split("?")
     if len(title_split) > 1:
-        pass
-        # raise Exception(f"Invalid url: {url}")
+        raise Exception(f"Invalid url: {url}")
     title = title_split[0]
     url = "https://www.publico.pt/" + url_split[0] + "/" + url_split[1] + "/" + url_split[2] + "/" + url_split[3] + "/" + url_split[4] + "/" + title
     return url, date, category, title

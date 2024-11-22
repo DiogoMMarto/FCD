@@ -47,8 +47,15 @@ def add_page_to_neo4j(node_data,_driver = None):
         session.execute_write(insert_connections, node_data['number'], node_data['connections'])
 
 def add_all_pages_to_neo4h(nodes_data):
+    i = 0
     with driver.session(database=database) as session:
         for node_data in nodes_data:
-            session.execute_write(insert_node, node_data,database=database)
+            i += 1; print("\rProgress: {}/{}".format(i, len(nodes_data)), end="")
+            session.execute_write(insert_node, node_data)
+    print()
+    i = 0
+    with driver.session(database=database) as session:
         for node_data in nodes_data:
-            session.execute_write(insert_connections, node_data['number'], node_data['connections'],database=database)
+            i += 1; print("\rProgress: {}/{}".format(i, len(nodes_data)), end="")
+            session.execute_write(insert_connections, node_data['number'], node_data['connections'])
+    print()

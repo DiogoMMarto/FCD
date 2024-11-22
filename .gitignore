@@ -4,6 +4,7 @@ data/
 # my files
 all_requests.txt
 filtered.json
+filtered_and_connections.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
