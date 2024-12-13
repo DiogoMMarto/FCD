@@ -37,7 +37,7 @@ class Node:
         self.color = color_category(self.category)
 
     def get_arquive_link(self):
-        return f"https://arquivo.pt/noFrame/replay/{self.timestamp}id_/{self.url}"
+        return f"https://arquivo.pt/noFrame/replay/{self.timestamp}/{self.url}"
 
 
     def to_json(self) -> str:
