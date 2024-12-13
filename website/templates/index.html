@@ -17,118 +17,141 @@
         <div class="bg-white p-6 rounded-lg shadow-lg w-1/3">
             <h2 class="text-xl font-bold mb-4" id="modal-title">Node Info</h2>
             <div id="modal-content" class="text-gray-700 mb-6">
+                <iframe id="modal-iframe" href="" width="100%" height="400"></iframe>
             </div>
             <button id="close-modal" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
                 Close
             </button>
         </div>
     </div>
-    {% for node in nodes %}
-    <iframe src="https://google.com" class=""></iframe>
-    {% endfor %}
 
     <script>
-        // Data for the graph
-        const nodes = [
-            { id: 1, name: "Node 1" },
-            { id: 2, name: "Node 2" },
-            { id: 3, name: "Node 3" }
-        ];
-
-        const links = [
-            { source: 1, target: 2 },
-            { source: 2, target: 3 }
-        ];
-
-        // SVG setup
+        const graphContainer = d3.select("#graph");
+        // set width and height to fullscreen
         const width = window.innerWidth;
         const height = window.innerHeight;
 
-        const svg = d3.select("#graph")
-            .append("svg")
+        const svg = graphContainer.append("svg")
             .attr("width", width)
             .attr("height", height);
 
-        const simulation = d3.forceSimulation(nodes)
-            .force("link", d3.forceLink(links).id(d => d.id))
+        // Initialize force simulation
+        const simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id).distance(width / 10))
             .force("charge", d3.forceManyBody())
             .force("center", d3.forceCenter(width / 2, height / 2));
+        // Add nodes and links dynamically
+        function renderGraph(url) {
+            // Clear previous graph
+            svg.selectAll("*").remove();
 
-        // Links
-        const link = svg.append("g")
-            .selectAll("line")
-            .data(links)
-            .join("line")
-            .attr("stroke", "#999")
-            .attr("stroke-opacity", 0.6)
-            .attr("stroke-width", d => Math.sqrt(d.value));
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    // Prepare nodes and links
+                    const nodes = data.map(d => ({
+                        id: d.id,
+                        title: d.title,
+                        color: d.color,
+                        arquive_link: d.arquive_link,
+                    }));
+                    const links = [];
+                    data.forEach(node => {
+                        node.connections.forEach(target => {
+                            links.push({ source: node.id, target: target });
+                        });
+                    });
 
-        // Nodes
-        const node = svg.append("g")
-            .selectAll("circle")
-            .data(nodes)
-            .join("circle")
-            .attr("r", 10)
-            .attr("fill", "#3182ce")
-            .call(drag(simulation));
+                    // Create links
+                    const link = svg.append("g")
+                        .attr("class", "links")
+                        .selectAll("line")
+                        .data(links)
+                        .join("line")
+                        .attr("stroke", "#999")
+                        .attr("stroke-opacity", 0.6)
+                        .attr("stroke-width", 1.5);
 
-        // Node labels
-        svg.append("g")
-            .selectAll("text")
-            .data(nodes)
-            .join("text")
-            .attr("dy", -15)
-            .attr("text-anchor", "middle")
-            .style("fill", "#000")
-            .text(d => d.name);
+                    // Create node groups (circle + text)
+                    const nodeGroup = svg.append("g")
+                        .attr("class", "nodes")
+                        .selectAll("g")
+                        .data(nodes)
+                        .join("g")
+                        .call(drag(simulation));
+
+                    // Add circles for nodes
+                    nodeGroup.append("circle")
+                        .attr("r", 20)
+                        .attr("fill", d => d.color)
+                        .attr("stroke", "#000")
+                        .attr("stroke-width", 1.5)
+                        .attr("opacity", 1)
+                        .on("click", (event, d) => {
+                            openModal(d);
+                        });
+
+                    // Add text labels for nodes
+                    nodeGroup.append("text")
+                        .attr("dy", "-2em")
+                        .attr("text-anchor", "middle")
+                        .text(d => d.title)
+                        .style("fill", "#0f0f0f")
+                        .style("font-size", "12px");
+
+                    // Update simulation
+                    simulation.nodes(nodes).on("tick", () => {
+                        // Update link positions
+                        link
+                            .attr("x1", d => d.source.x)
+                            .attr("y1", d => d.source.y)
+                            .attr("x2", d => d.target.x)
+                            .attr("y2", d => d.target.y);
+
+                        // Update node positions
+                        nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
+                    });
+
+                    // Set simulation forces
+                    simulation.force("link").links(links);
+                })
+                .catch(error => console.error("Error fetching graph data:", error));
+        }
 
         // Drag behavior
         function drag(simulation) {
-            function dragStarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-
-            function dragEnded(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-
             return d3.drag()
-                .on("start", dragStarted)
-                .on("drag", dragged)
-                .on("end", dragEnded);
+                .on("start", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                })
+                .on("drag", (event, d) => {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                })
+                .on("end", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                });
         }
 
-        simulation.on("tick", () => {
-            link
-                .attr("x1", d => d.source.x)
-                .attr("y1", d => d.source.y)
-                .attr("x2", d => d.target.x)
-                .attr("y2", d => d.target.y);
+        function openModal(node) {
+            const modal = document.getElementById("modal");
+            const modalTitle = document.getElementById("modal-title");
+            const modalText = document.getElementById("modal-text");
+            const modalLink = document.getElementById("modal-link");
+            const modalIframe = document.getElementById("modal-iframe");
+            modal.classList.remove("hidden");
 
-            node
-                .attr("cx", d => d.x)
-                .attr("cy", d => d.y);
-        });
-
-        // Modal functionality
-        node.on("click", (event, d) => {
-            d3.select("#modal-title").text(`Node: ${d.name}`);
-            d3.select("#modal-content").text(`You clicked on ${d.name}, ID: ${d.id}`);
-            d3.select("#modal").classed("hidden", false);
-        });
-
-        d3.select("#close-modal").on("click", () => {
-            d3.select("#modal").classed("hidden", true);
-        });
+            modalTitle.textContent = node.title;
+            // update iframe href
+            modalIframe.href = node.arquive_link;
+            modalIframe.src = node.arquive_link;
+        }
+        // Render initial graph
+        renderGraph("/first_graph");
     </script>
 </body>
 

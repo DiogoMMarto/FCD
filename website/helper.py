@@ -7,8 +7,19 @@ pallete = {}
 def color_category(category):
     global pallete
     if category not in pallete:
-        pallete[category] = f"#{''.join([str(random.randint(0, 255)) for _ in range(3)])}"
+        color = [str(random.randint(0, 255)) for _ in range(3)]
+        while check_if_color_too_dark_or_light((int(color[0]), int(color[1]), int(color[2]))):
+            color = [str(random.randint(0, 255)) for _ in range(3)]
+        pallete[category] = color_to_string(color)
     return pallete[category]
+
+def check_if_color_too_dark_or_light(color):
+    r, g, b = color
+    c = (r*0.3 + g*0.50 + b*0.2) / 3
+    return 100 < c < 150
+
+def color_to_string(color):
+    return f"rgb({color[0]}, {color[1]}, {color[2]})"
 
 class Node:
     def __init__(self, data, connections):
