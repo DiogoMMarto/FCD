@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tkinter import INSERT
 from neo4j import GraphDatabase
 
 uri = "bolt://localhost:7687"
@@ -8,54 +9,55 @@ database = "neo4j"
 
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
+INSERT_NODE_QUERY = """
+MERGE (n:Page {number: $number})
+SET n.category = $category,
+    n.date = $date,
+    n.path = $path,
+    n.timestamp = $timestamp,
+    n.title = $title,
+    n.url = $url
+RETURN n
+"""
+
+INSERT_CONNECTIONS_QUERY = """
+MATCH (source:Page {number: $source_number})
+MATCH (target:Page {number: $target_number})
+MERGE (source)-[:LINKS_TO]->(target)
+"""
+
 def insert_node(tx, node_data):
-    # Cypher query to create a node with its properties
-    query = """
-    MERGE (n:Page {number: $number})
-    SET n.category = $category,
-        n.date = $date,
-        n.length = $length,
-        n.mime = $mime,
-        n.path = $path,
-        n.status = $status,
-        n.timestamp = $timestamp,
-        n.title = $title,
-        n.url = $url
-    RETURN n
-    """
     # Execute the query with node data
-    tx.run(query, **node_data)
+    tx.run(INSERT_NODE_QUERY, **node_data)
 
 def insert_connections(tx, source_number, target_numbers):
-    # Cypher query to create relationships
     for target_number in target_numbers:
-        query = """
-        MATCH (source:Page {number: $source_number})
-        MERGE (target:Page {number: $target_number})
-        MERGE (source)-[:LINKS_TO]->(target)
-        """
-        # Execute the query for each connection
-        tx.run(query, source_number=source_number, target_number=target_number)
+        tx.run(INSERT_CONNECTIONS_QUERY, source_number=source_number, target_number=target_number)
 
 def add_page_to_neo4j(node_data,_driver = None):
     if _driver is None:
         _driver = driver
     with _driver.session() as session:
-        # Insert the node
-        session.execute_write(insert_node, node_data)
-        # Insert its connections (relationships)
-        session.execute_write(insert_connections, node_data['number'], node_data['connections'])
+        insert_node(session, node_data)
+        insert_connections(session, node_data['number'], node_data['connections'])
 
 def add_all_pages_to_neo4h(nodes_data):
     i = 0
+    # create index on node number
     with driver.session(database=database) as session:
-        for node_data in nodes_data:
-            i += 1; print("\rProgress: {}/{}".format(i, len(nodes_data)), end="")
-            session.execute_write(insert_node, node_data)
-    print()
-    i = 0
-    with driver.session(database=database) as session:
-        for node_data in nodes_data:
-            i += 1; print("\rProgress: {}/{}".format(i, len(nodes_data)), end="")
-            session.execute_write(insert_connections, node_data['number'], node_data['connections'])
-    print()
+        session.run("CREATE INDEX number_index FOR (n:Page) ON (n.number)")
+    
+    def batch_insert(nodes_data):
+        with driver.session(database=database) as session:
+            with session.begin_transaction() as tx:
+                for node_data in nodes_data:
+                    add_page_to_neo4j(node_data, tx)
+                tx.commit()
+
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = [executor.submit(batch_insert, nodes_data[i:i+100]) for i in range(0, len(nodes_data), 100)]
+        for future in as_completed(futures):
+            i += 100
+            print(f"\r{i}/{len(nodes_data)}", end="")
+
+    print("\nDone")

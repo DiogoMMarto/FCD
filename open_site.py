@@ -6,8 +6,12 @@ import os
 import re
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+import bs4 as bs
+import spacy as sp
+from sklearn.feature_extraction.text import TfidfVectorizer
 from neo4j_driver import add_all_pages_to_neo4h, driver
+
+DEST_FOLDER = "train/processed/"
 
 # deterministic hash
 def my_hash(s: str):
@@ -47,7 +51,8 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
     if url_split[4] != "noticia":
         raise Exception(f"Invalid url: {url}")
     title = url_split[5]
-    title_split = title.split("?")
+    # split by ? or #
+    title_split = re.split(r"[#?]", title)
     if len(title_split) > 1:
         raise Exception(f"Invalid url: {url}")
     title = title_split[0]
@@ -74,18 +79,14 @@ def parse_big_file(file_path:str) -> dict:
             cur_time =  int(filter_larger.get(url, {"timestamp": 0})["timestamp"])
             if timestamp > cur_time:
                 filter_larger[url] = {
-                                      "length": json_obj['length'], 
-                                      "mime": json_obj['mime'],
-                                      "status": json_obj['status'],
-                                      "url": json_obj['url'],
-                                      "url_normal": url,
+                                      "url": url,
                                       "date": date,
                                       "category": category,
                                       "title": title,
                                       "number": n,
                                       "timestamp": timestamp
                                     }
-    print()
+    print(f"\r{n}\n", end="")
     return filter_larger
 
 
@@ -101,8 +102,8 @@ def extract_urls(content:str) -> set[str]:
     r = set(re.findall(url_pattern, content))
     return r
 
-def process_site(url,d) -> tuple[str,list[int]]:
-    url_file , path = open_site(url)
+def process_site(_url,d,number) -> tuple[str,list[int]]:
+    url_file , _ = open_site(_url, False)
     urls = extract_urls(url_file)
     urls2 = list()
     for url in urls:
@@ -115,8 +116,14 @@ def process_site(url,d) -> tuple[str,list[int]]:
     for url in urls2:
         if url in d:
             connections.append(d[url]["number"])
+    textR = extract_text(url_file)
+    textC = clean_text(textR)
+    path = DEST_FOLDER + str(number) + ".txt"
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(textC)
     return path , connections
-def process_filtered_sites(d):
+
+def process_filtered_sites(d,n = 0, save_callback = lambda x: None):
     results = []
     
     def process_data(data):
@@ -125,25 +132,59 @@ def process_filtered_sites(d):
             try:
                 url = data["url"]
                 timestamp = data["timestamp"]
-                url = f"https://arquivo.pt/noFrame/replay/{timestamp}id_/{url}"
-                path, connections = process_site(url, d)
+                url = f"https://arquivo.pt/noFrame/replay/{timestamp}/{url}"
+                path, connections = process_site(url, d, data["number"])
                 data["path"] = path
                 data["connections"] = connections
                 return data  # Return the modified data on success
             except Exception as e:
-                print(f"\n[ERROR] {url} {e}")
+                print(f"\n[ERROR] {data} {url} {e} ")
                 time.sleep(60)  # Delay before retrying
         return None  # Return None if all retries fail
 
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {executor.submit(process_data, data): data for data in d.values()}
-        for i, future in enumerate(as_completed(futures), 1):
-            print(f"\r{i}/{len(d)}", end="")
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        futures = {executor.submit(process_data, data): data for i,data in enumerate(d.values()) if i >= n}
+        for i, future in enumerate(as_completed(futures), n):
             result = future.result()
+            # print(f"\r{i}/{len(d)}", end="")
+            print(i)
+            # if i % 1000 == 0:
+            #     save_callback(results.copy())
             if result is not None:
                 results.append(result)  # Collect successful results
 
+    print("\nDone")
+
     return results  # Return list of processed data entries
+
+def extract_text(content:str) -> str:
+    soup = bs.BeautifulSoup(content, 'html.parser')
+    # get text from only elements inside a div with the class "story__body" and "story__headline"
+    text = soup.find("h1", class_="story__headline").get_text() 
+    text = soup.find("div", class_="story__body").get_text() + text
+    # replace newlines with spaces and multiple spaces with single spaces
+    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\d+', 'NUM', text)
+    return text
+    
+nlp = sp.load("pt_core_news_lg")
+def clean_text(text:str) -> str:
+    # use spacy to clean the text
+    # remove stop words
+    # lemmatize
+    doc = nlp(text)
+    text = " ".join(
+        [token.lemma_ for token in doc 
+         if not token.is_stop and not token.is_punct])
+    return text
+
+
+def tfidf(documents) -> dict:
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(documents)
+    feature_names = vectorizer.get_feature_names_out()
+    dense_tfidf = tfidf_matrix.todense()
+    return dense_tfidf , feature_names
 
 def main():
     _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")

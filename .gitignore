@@ -1,10 +1,14 @@
 # neo4j volume
 data/
+train/
+databases/
 
 # my files
 all_requests.txt
 filtered.json
 filtered_and_connections.json
+s.py
+copy_to_train.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
