@@ -25,11 +25,8 @@ class Node:
     def __init__(self, data, connections):
         self.category = data['category']
         self.date = data['date']
-        self.length = data['length']
-        self.mime = data['mime']
         self.number = data['number']
         self.path = data['path']
-        self.status = data['status']
         self.timestamp = data['timestamp']
         self.title = data['title']
         self.url = data['url']
@@ -44,14 +41,10 @@ class Node:
         return {
             "category": self.category,
             "date": self.date,
-            # "length": self.length,
-            # "mime": self.mime,
             "id": self.number,
             "path": self.path,
-            # "status": self.status,
             "timestamp": self.timestamp,
             "title": self.title,
-            # "url": self.url,
             "connections": self.connections,
             "color": self.color,
             "arquive_link": self.get_arquive_link(),

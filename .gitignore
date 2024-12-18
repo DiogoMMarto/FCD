@@ -9,6 +9,10 @@ filtered.json
 filtered_and_connections.json
 s.py
 copy_to_train.py
+documents*
+labels.txt
+text.json
+Possible*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

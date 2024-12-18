@@ -18,14 +18,14 @@ def close_driver():
 
 QUERY_F = """
 MATCH (n)--()
-WHERE n.timestamp > 20220908110000
+WHERE n.number <> 1787457
 WITH n, count(*) AS c
 ORDER BY c DESC
-LIMIT 10
+LIMIT 200
 WITH collect(n.number) as cc
 MATCH (n) -- (m) 
 WHERE n.number in cc and m.number in cc
-RETURN n, collect(m.number) as connections, count(*) as c order by c desc
+RETURN n, collect(m.number) as connections, count(*) as c order by c desc LIMIT 10
 """
 @functools.cache
 def first_graph():

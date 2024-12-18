@@ -18,6 +18,9 @@ def my_hash(s: str):
     h = hashlib.sha256(s.encode('utf-8')).hexdigest()
     return h
 
+class TooManyRequestsError(Exception):
+    pass
+
 def open_site(url:str,cached:bool = True) -> tuple[str, str]:
     hash_url = my_hash(url)
     file_path = '.cache/' + hash_url + ".json"
@@ -32,7 +35,7 @@ def open_site(url:str,cached:bool = True) -> tuple[str, str]:
                 f.write(response.text)
         return response.text , file_path
     else:
-        raise Exception(f"Failed to open site: {response.status_code}")
+        raise TooManyRequestsError(f"Failed to open site: {response.status_code}")
     
 def read_cache(url):
     hash_url = my_hash(url)
@@ -91,39 +94,46 @@ def parse_big_file(file_path:str) -> dict:
 
 
 url_pattern = r"https?://[^\s\"'>]+"
+url_pattern2 = r"href=\".*\""
 def extract_urls(content:str) -> set[str]:
-    # TODO: CHECK IF URL_2 IS NEEDED
-    # url_pattern2 = r"href=\".*\""
-    # for x in set(re.findall(url_pattern2, content)):
-    #     x2 = x.replace("href=\"", "").replace("\"", "")
-    #     if len(x2) > 0 and x2[0] == "/":
-    #         x2 = "https://www.publico.pt" + x2
-    #     r.add(x2)
-    r = set(re.findall(url_pattern, content))
-    return r
-
-def process_site(_url,d,number) -> tuple[str,list[int]]:
-    url_file , _ = open_site(_url, False)
-    urls = extract_urls(url_file)
-    urls2 = list()
-    for url in urls:
+    r = []
+    for x in set(re.findall(url_pattern2, content)+re.findall(url_pattern, content)):
+        x2: str = x.replace("href=\"", "")
+        if (ind := x2.find("\"")) != -1:
+            x2 = x2[:ind]
+        if len(x2) == 0:
+            continue
+        if x2.startswith("/noFrame/replay"):
+            ind = x2.find("http")
+            x2 = x2[ind:]
+        if x2.startswith("https://arquivo.pt/noFrame/replay"):
+            x2 = x2.removeprefix("https://arquivo.pt/noFrame/replay")
+            ind = x2.find("http")
+            x2 = x2[ind:]
         try:
-            r = parse_url(url)
+            x2 = parse_url(x2)[0]
         except Exception as e:
             continue
-        urls2.append(r[0])
+        r.append(x2)
+    return set(r)
+
+DO_NLP_PROCCESSING = False
+def process_site(_url,d,number) -> tuple[str,list[int]]:
+    url_file , _ = open_site(_url, True)
+    urls = extract_urls(url_file)
     connections = []
-    for url in urls2:
+    for url in urls:
         if url in d:
             connections.append(d[url]["number"])
-    textR = extract_text(url_file)
-    textC = clean_text(textR)
     path = DEST_FOLDER + str(number) + ".txt"
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(textC)
+    if DO_NLP_PROCCESSING:
+        textR = extract_text(url_file)
+        textC = clean_text(textR)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(textC)
     return path , connections
 
-def process_filtered_sites(d,n = 0, save_callback = lambda x: None):
+def process_filtered_sites(d,n = 0):
     results = []
     
     def process_data(data):
@@ -137,22 +147,19 @@ def process_filtered_sites(d,n = 0, save_callback = lambda x: None):
                 data["path"] = path
                 data["connections"] = connections
                 return data  # Return the modified data on success
+            except TooManyRequestsError as e:
+                time.sleep(60)
             except Exception as e:
-                print(f"\n[ERROR] {data} {url} {e} ")
-                time.sleep(60)  # Delay before retrying
+                print(f"\n[ERROR] {url} {e} ")
         return None  # Return None if all retries fail
 
     with ThreadPoolExecutor(max_workers=32) as executor:
         futures = {executor.submit(process_data, data): data for i,data in enumerate(d.values()) if i >= n}
         for i, future in enumerate(as_completed(futures), n):
             result = future.result()
-            # print(f"\r{i}/{len(d)}", end="")
-            print(i)
-            # if i % 1000 == 0:
-            #     save_callback(results.copy())
+            print(f"\r{i}/{len(d)}", end="")
             if result is not None:
-                results.append(result)  # Collect successful results
-
+                results.append(result)  
     print("\nDone")
 
     return results  # Return list of processed data entries
@@ -163,11 +170,12 @@ def extract_text(content:str) -> str:
     text = soup.find("h1", class_="story__headline").get_text() 
     text = soup.find("div", class_="story__body").get_text() + text
     # replace newlines with spaces and multiple spaces with single spaces
-    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\d+', 'NUM', text)
+    text = re.sub(r'[\uD800-\uDFFF]', '', text)
     return text
     
-nlp = sp.load("pt_core_news_lg")
+nlp = sp.load("pt_core_news_sm")
 def clean_text(text:str) -> str:
     # use spacy to clean the text
     # remove stop words
@@ -179,12 +187,11 @@ def clean_text(text:str) -> str:
     return text
 
 
-def tfidf(documents) -> dict:
-    vectorizer = TfidfVectorizer()
+def tfidf(documents,**kwargs) -> dict:
+    vectorizer = TfidfVectorizer(**kwargs)
     tfidf_matrix = vectorizer.fit_transform(documents)
     feature_names = vectorizer.get_feature_names_out()
-    dense_tfidf = tfidf_matrix.todense()
-    return dense_tfidf , feature_names
+    return tfidf_matrix , feature_names
 
 def main():
     _ , path = open_site("https://arquivo.pt/wayback/cdx?url=publico.pt/*&filter=url:noticia&filter=mime:html&output=json")
