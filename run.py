@@ -80,7 +80,7 @@ def main():
         l2 = step_3(l)
     if "4" in args.steps:
         if "3" not in args.steps:
-            with open("filtered_and_connections.json","r",encoding="utf-8") as f:
+            with open(".cache/filtered_and_connections.json","r",encoding="utf-8") as f:
                 l2 = json.loads(f.read())
         step_4(l2)
     

@@ -12,7 +12,10 @@ copy_to_train.py
 documents*
 labels.txt
 text.json
+.vscode/*
 Possible*
+*.pickle
+*.keras
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

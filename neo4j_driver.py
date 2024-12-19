@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tkinter import INSERT
 from neo4j import GraphDatabase
 
 uri = "bolt://localhost:7687"
@@ -24,6 +23,28 @@ INSERT_CONNECTIONS_QUERY = """
 MATCH (source:Page {number: $source_number})
 MATCH (target:Page {number: $target_number})
 MERGE (source)-[:LINKS_TO]->(target)
+"""
+
+AGGREGATE_CAT = """
+MATCH (n)-[r]->(m)
+WHERE n.category IS NOT NULL AND m.category IS NOT NULL
+WITH n.category AS source, m.category AS target, COUNT(r) AS count
+RETURN source, target, count
+"""
+
+GRAPH_AGGREGATE_CAT = """
+MATCH (n)
+WHERE n.category IS NOT NULL
+MERGE (c:Category {name: n.category})
+"""
+
+GRAPH_AGGREGATE_CAT_REL = """
+MATCH (n)-[r]->(m)
+WHERE n.category IS NOT NULL AND m.category IS NOT NULL
+WITH n.category AS source, m.category AS target, COUNT(r) AS count
+MATCH (sourceNode:Category {name: source}), (targetNode:Category {name: target})
+MERGE (sourceNode)-[rel:CONNECTED_TO]->(targetNode)
+SET rel.count = count
 """
 
 def get_driver():
