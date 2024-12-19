@@ -44,7 +44,6 @@ def read_cache(url):
         return f.read()
 
 def parse_url(url_original:str) -> tuple[str,str,str,str]:
-    # TODO: CHECK IF things after ? change page content
     url = url_original.replace("https://www.publico.pt/", "")
     url_split = url.split("/")
     if len(url_split) > 6:
@@ -54,7 +53,6 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
     if url_split[4] != "noticia":
         raise Exception(f"Invalid url: {url}")
     title = url_split[5]
-    # split by ? or #
     title_split = re.split(r"[#?]", title)
     if len(title_split) > 1:
         raise Exception(f"Invalid url: {url}")
@@ -97,7 +95,10 @@ url_pattern = r"https?://[^\s\"'>]+"
 url_pattern2 = r"href=\".*\""
 def extract_urls(content:str) -> set[str]:
     r = []
-    for x in set(re.findall(url_pattern2, content)+re.findall(url_pattern, content)):
+    for x in set(
+        re.findall(url_pattern2, content)+
+        re.findall(url_pattern, content)
+    ):
         x2: str = x.replace("href=\"", "")
         if (ind := x2.find("\"")) != -1:
             x2 = x2[:ind]
@@ -112,7 +113,7 @@ def extract_urls(content:str) -> set[str]:
             x2 = x2[ind:]
         try:
             x2 = parse_url(x2)[0]
-        except Exception as e:
+        except Exception:
             continue
         r.append(x2)
     return set(r)
@@ -142,7 +143,7 @@ def process_filtered_sites(d,n = 0):
             try:
                 url = data["url"]
                 timestamp = data["timestamp"]
-                url = f"https://arquivo.pt/noFrame/replay/{timestamp}/{url}"
+                url = f"https://arquivo.pt/noFrame/replay/{timestamp}id_/{url}"
                 path, connections = process_site(url, d, data["number"])
                 data["path"] = path
                 data["connections"] = connections
@@ -177,9 +178,7 @@ def extract_text(content:str) -> str:
     
 nlp = sp.load("pt_core_news_sm")
 def clean_text(text:str) -> str:
-    # use spacy to clean the text
-    # remove stop words
-    # lemmatize
+    # lemmatize and remove stop words and punct
     doc = nlp(text)
     text = " ".join(
         [token.lemma_ for token in doc 
