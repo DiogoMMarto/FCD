@@ -3,13 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FCD PROJECT</title>
+    <title>FCD Project - Graph</title>
     <link href="./../static/output.css" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.js"></script>
 </head>
 
 <body class="bg-gray-100">
     <div id="main-container" class="relative">
+        <!-- navbar -->
+        <nav class="bg-blue-500 text-white p-4">
+            <h1 class="text-2xl font-semibold">FCD Project - Graph</h1>
+            <!-- to index_agg and index_graph -->
+            <a href="/aggregrate" class="p-2">Aggregate</a>
+            <a href="/plot" class="p-2">Plot</a>
+        </nav>
+
+        <form class="flex p-4" onsubmit="event.preventDefault(); renderGraph(`/graph?query=${QUERY.value}`)">
+            <input type="text" name="query" id="query" class="w-1/2 p-2"
+                value="MATCH (n)--() WHERE n.number <> 1787457 WITH n, count(*) AS c ORDER BY c DESC LIMIT 200 WITH collect(n.number) as cc MATCH (n) -- (m) WHERE n.number in cc and m.number in cc RETURN n, collect(m.number) as connections, count(*) as c order by c desc LIMIT 10">
+
+            <!-- submit button -->
+            <button type="submit" class="p-2 bg-blue-500 text-white">Plot</button>
+        </form>
+
         <!-- Graph Container -->
         <div id="graph" class="flex-grow bg-gray-50"></div>
 
@@ -18,7 +34,8 @@
 
         <!-- Offcanvas Panel -->
         <div id="offcanvasPanel"
-            class="fixed top-0 left-0 h-full bg-white shadow-lg transform -translate-x-full transition-transform z-50" style="width: 50%;">
+            class="fixed top-0 left-0 h-full bg-white shadow-lg transform -translate-x-full transition-transform z-50"
+            style="width: 50%;">
 
             <!-- Panel Header -->
             <div class="p-4 border-b border-gray-200">
@@ -33,6 +50,7 @@
     </div>
 
     <script>
+        let QUERY = document.getElementById("query");
         const graphContainer = d3.select("#graph");
         // set width and height to fullscreen
         const width = window.innerWidth;
@@ -43,10 +61,11 @@
             .attr("height", height);
 
         // Initialize force simulation
-        const simulation = d3.forceSimulation()
+        let simulation = d3.forceSimulation()
             .force("link", d3.forceLink().id(d => d.id).distance(width / 10))
             .force("charge", d3.forceManyBody())
             .force("center", d3.forceCenter(width / 2, height / 2));
+
         // Add nodes and links dynamically
         function renderGraph(url) {
             // Clear previous graph
@@ -56,75 +75,118 @@
                 .then(response => response.json())
                 .then(data => {
                     // Prepare nodes and links
-                    const nodes = data.map(d => ({
-                        id: d.id,
-                        title: d.title,
-                        color: d.color,
-                        arquive_link: d.arquive_link,
-                        category: d.category,
-                    }));
-                    const links = [];
-                    data.forEach(node => {
-                        node.connections.forEach(target => {
-                            if (nodes.find(n => n.id === target))
-                                links.push({ source: node.id, target: target });
-                        });
-                    });
-
-                    // Create links
-                    const link = svg.append("g")
-                        .attr("class", "links")
-                        .selectAll("line")
-                        .data(links)
-                        .join("line")
-                        .attr("stroke", "#999")
-                        .attr("stroke-opacity", 0.6)
-                        .attr("stroke-width", 1.5);
-
-                    // Create node groups (circle + text)
-                    const nodeGroup = svg.append("g")
-                        .attr("class", "nodes")
-                        .selectAll("g")
-                        .data(nodes)
-                        .join("g")
-                        .call(drag(simulation));
-
-                    // Add circles for nodes
-                    nodeGroup.append("circle")
-                        .attr("r", 20)
-                        .attr("fill", d => d.color)
-                        .attr("stroke", "#000")
-                        .attr("stroke-width", 1.5)
-                        .attr("opacity", 1)
-                        .on("click", (event, d) => {
-                            openModal(d);
-                        });
-
-                    // Add text labels for nodes
-                    nodeGroup.append("text")
-                        .attr("dy", "-2em")
-                        .attr("text-anchor", "middle")
-                        .text(d => d.title)
-                        .style("fill", "#0f0f0f")
-                        .style("font-size", "12px");
-
-                    // Update simulation
-                    simulation.nodes(nodes).on("tick", () => {
-                        // Update link positions
-                        link
-                            .attr("x1", d => d.source.x)
-                            .attr("y1", d => d.source.y)
-                            .attr("x2", d => d.target.x)
-                            .attr("y2", d => d.target.y);
-
-                        // Update node positions
-                        nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
-                    });
-
-                    // Set simulation forces
-                    simulation.force("link").links(links);
+                    const { nodes, links } = buildGraph(data);
                 })
                 .catch(error => console.error("Error fetching graph data:", error));
+        }
+
+        async function getNeighbors(node, nodes) {
+
+            nodes_id = nodes.map(d => d.id);
+            b = JSON.stringify(nodes_id)
+            return await fetch("/neighbors/" + node.id, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: b,
+            })
+                .then(response => response.json())
+                .then(data => {
+                    return data;
+                })
+                .catch(error => console.error("Error fetching neighbors:", error));
+        }
+
+        function buildGraph(data) {
+            svg.selectAll("*").remove();
+            let nodes = data.map(d => ({
+                id: d.id,
+                title: d.title,
+                color: d.color,
+                arquive_link: d.arquive_link,
+                category: d.category,
+            }));
+            let links = [];
+            data.forEach(node => {
+                node.connections.forEach(target => {
+                    if (nodes.find(n => n.id === target))
+                        links.push({ source: node.id, target: target });
+                });
+            });
+
+            // Create links
+            const link = svg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .join("line")
+                .attr("stroke", "#999")
+                .attr("stroke-opacity", 0.6)
+                .attr("stroke-width", 1.5);
+
+            // Create node groups (circle + text)
+            const nodeGroup = svg.append("g")
+                .attr("class", "nodes")
+                .selectAll("g")
+                .data(nodes)
+                .join("g")
+                .call(drag(simulation));
+
+
+            // Add circles for nodes
+            nodeGroup.append("circle")
+                .attr("r", 20)
+                .attr("fill", d => d.color)
+                .attr("stroke", "#000")
+                .attr("stroke-width", 1.5)
+                .attr("opacity", 1)
+                .on("mouseover", (event, d) => {
+                    d3.select(event.target).attr("opacity", 0.7);
+                })
+                .on("mouseout", (event, d) => {
+                    d3.select(event.target).attr("opacity", 1);
+                })
+                .on("click", (event, d) => {
+                    openModal(d);
+                    getNeighbors(d, nodes).then(data2 => {
+                        // append to the nodeGroup
+                        console.log(data2)
+                        // const { nodes2, links2 } = buildGraph(data2);
+                    }
+                    )
+                });
+
+            // Add text labels for nodes
+            nodeGroup.append("text")
+                .attr("dy", "0em")
+                .attr("text-anchor", "middle")
+                .text(d => d.title)
+                .style("fill", "#0f0f0f")
+                .style("font-size", "12px");
+
+            // Initialize force simulation
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(width / 10))
+                .force("charge", d3.forceManyBody())
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            // Update simulation
+            simulation.nodes(nodes).on("tick", () => {
+                // Update link positions
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                // Update node positions
+                nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            // Set simulation forces
+            simulation.force("link").links(links);
+            return { nodes, links }
         }
 
         // Drag behavior
@@ -177,4 +239,5 @@
         renderGraph("/first_graph");
     </script>
 </body>
+
 </html>

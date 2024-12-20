@@ -1,0 +1,225 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FCD Project - Aggregate Graph</title>
+    <link href="./../static/output.css" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.js"></script>
+</head>
+<body class="bg-gray-100">
+    <nav class="bg-blue-500 text-white p-4">
+        <h1 class="text-2xl font-semibold">FCD Project - Aggregate</h1>
+        <!-- to index_agg and index_graph -->
+        <a href="/plot" class="p-2">Plot</a>
+        <a href="/" class="p-2">Graph</a>
+    </nav>
+    <div id="main-container" class="relative">
+        <!-- Graph Container -->
+        <div id="graph" class="flex-grow bg-gray-50"></div>
+
+        <!-- Overlay -->
+        <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-40"></div>
+
+        <!-- Offcanvas Panel -->
+        <div id="offcanvasPanel"
+            class="fixed top-0 left-0 h-full bg-white shadow-lg transform -translate-x-full transition-transform z-50"
+            style="width: 50%;">
+
+            <!-- Panel Header -->
+            <div class="p-4 border b border-gray-200">
+                <h2 id="side-pane-title" class="text-lg font-semibold"></h2>
+            </div>
+
+            <!-- Panel Content -->
+            <div class="p-2">
+                <div id="side-pane-content" class="text-lg font-semibold mb-2"></div>
+            </div>
+    
+        </div>
+</body>
+
+<script>
+    const graphContainer = d3.select("#graph");
+    // set width and height to fullscreen
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const svg = graphContainer.append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    // Initialize force simulation
+    const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(width / 10))
+        .force("charge", d3.forceManyBody())
+        .force("center", d3.forceCenter(width / 2, height / 2));
+    // Add nodes and links dynamically
+    function renderGraph(url) {
+        // Clear previous graph
+        svg.selectAll("*").remove();
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                // Prepare nodes and links
+                const { nodes, links } = buildGraph(data);
+            })
+            .catch(error => console.error("Error fetching graph data:", error));
+    }
+
+    async function getNeighbors(node, nodes) {
+
+        nodes_id = nodes.map(d => d.id);
+        b = JSON.stringify(nodes_id)
+        return await fetch("/neighbors/" + node.id, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: b,
+        })
+            .then(response => response.json())
+            .then(data => {
+                return data;
+            })
+            .catch(error => console.error("Error fetching neighbors:", error));
+    }
+
+    function buildGraph(data) {
+        svg.selectAll("*").remove();
+        let nodes = data.map(d => ({
+            id: d.id,
+            name: d.name,
+            color: d.color,
+            count: d.count
+        }));
+        let links = [];
+        data.forEach(node => {
+            node.connections.forEach(target => {
+                if (nodes.find(n => n.id === target))
+                    links.push({ source: node.id, target: target });
+            });
+        });
+
+        // Create links
+        const link = svg.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(links)
+            .join("line")
+            .attr("stroke", "#999")
+            .attr("stroke-opacity", 0.6)
+            .attr("stroke-width", 1.5);
+
+        // Create node groups (circle + text)
+        const nodeGroup = svg.append("g")
+            .attr("class", "nodes")
+            .selectAll("g")
+            .data(nodes)
+            .join("g")
+            .call(drag(simulation));
+
+
+        // Add circles for nodes
+        nodeGroup.append("circle")
+            .attr("r", 20)
+            .attr("fill", d => d.color)
+            .attr("stroke", "#000")
+            .attr("stroke-width", 1.5)
+            .attr("opacity", 1)
+            .on("mouseover", (event, d) => {
+                d3.select(event.target).attr("opacity", 0.7);
+            })
+            .on("mouseout", (event, d) => {
+                d3.select(event.target).attr("opacity", 1);
+            })
+            .on("click", (event, d) => {
+                openModal(d);
+                getNeighbors(d, nodes).then(data2 => {
+                    // append to the nodeGroup
+                    console.log(data2)
+                        // const { nodes2, links2 } = buildGraph(data2);
+                    }
+                )
+            });
+
+        // Add text labels for nodes
+        nodeGroup.append("text")
+            .attr("dy", "0em")
+            .attr("text-anchor", "middle")
+            .text(d => d.name)
+            .style("fill", "#0f0f0f")
+            .style("font-size", "12px");
+
+        // Update simulation
+        simulation.nodes(nodes).on("tick", () => {
+            // Update link positions
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            // Update node positions
+            nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        // Set simulation forces
+        simulation.force("link").links(links);
+        return { nodes, links }
+    }
+
+    // Drag behavior
+    function drag(simulation) {
+        return d3.drag()
+            .on("start", (event, d) => {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            })
+            .on("drag", (event, d) => {
+                d.fx = event.x;
+                d.fy = event.y;
+            })
+            .on("end", (event, d) => {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            });
+    }
+
+    function openModal(node) {
+        offcanvasPanel.classList.remove("-translate-x-full");
+        overlay.classList.remove("hidden");
+
+        console.log(node)
+        html_conn = "<ul>";
+        html_conn += node.count.map(d => `<li>${d}</li>`).join("");
+        html_conn += "</ul>";
+
+        d3.select("#side-pane-title")
+            .text(`${node.name}`);
+
+        d3.select("#side-pane-content").html(`
+        <p class="w-full"><strong>ID:</strong> ${node.id}</p>
+    ` + html_conn);
+        console.log(node)
+    }
+    // Function to hide side pane (optional, e.g., on background click)
+    function hideSidePane() {
+        d3.select("#side-pane").classed("hidden", true);
+    }
+
+    const openButton = document.getElementById("openPanel");
+    const offcanvasPanel = document.getElementById("offcanvasPanel");
+    const overlay = document.getElementById("overlay");
+
+    overlay.addEventListener("click", () => {
+        offcanvasPanel.classList.add("-translate-x-full");
+        overlay.classList.add("hidden");
+    });
+
+    renderGraph("/agg_graph");
+</script>
+
+</html>

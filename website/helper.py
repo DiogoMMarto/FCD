@@ -53,3 +53,24 @@ class Node:
     
 def node_list_to_json(nodes):
     return json.dumps([node.to_json() for node in nodes])
+
+def to_plot(plot):
+    return json.dumps(plot)
+
+class NodeA:
+    def __init__(self, data, connections,count):
+        self.id = data['uniqueNumber']
+        self.name = data['name']
+        self.connections = connections
+        self.count = count
+        self.color = color_category("CATEGORY")
+
+    def to_json(self) -> str:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "connections": self.connections,
+            "count": self.count,
+            "color": self.color
+        }
+    

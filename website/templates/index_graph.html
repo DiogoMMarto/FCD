@@ -1,0 +1,106 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FCD Project - Plots</title>
+    <link href="./../static/output.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body class="bg-gray-100">
+    <div id="main-container" class="relative">
+        <!-- navbar -->
+        <nav class="bg-blue-500 text-white p-4">
+            <h1 class="text-2xl font-semibold">FCD Project - Plot</h1>
+            <!-- to index_agg and index_graph -->
+            <a href="/aggregrate" class="p-2">Aggregate</a>
+            <a href="/" class="p-2">Graph</a>
+        </nav>
+        <form class="flex p-4" onsubmit="event.preventDefault(); refreshPlot()">
+            <!-- get query -->
+            <input type="text" name="query" id="query" class="w-1/2 p-2"
+                value="match (n) return n.date as x, count(*) as y order by x desc">
+            <!-- if line or hist -->
+            <select name="type" id="type" class="p-4">
+                <option value="line">Line</option>
+                <option value="hist">Histogram</option>
+            </select>
+            <!-- submit button -->
+            <button type="submit" class="p-2 bg-blue-500 text-white">Plot</button>
+        </form>
+        <!-- plot -->
+        <canvas id="chartCanvas"></canvas>
+    </div>
+    <script>
+        function refreshPlot() {
+    console.log("Refreshing plot...");
+    const query = document.getElementById("query").value;
+    const type = document.getElementById("type").value;
+
+    fetch(`/plots?type=${type}&query=${query}`)
+        .then(response => response.json())
+        .then(data => {
+            const labels = data.map(d => d.x); // Use x values as labels
+            const values = data.map(d => d.y); // Use y values as dataset
+            renderChart(labels, values, type);
+        });
+}
+
+function renderChart(labels, values, type) {
+    // Destroy existing chart if it exists
+    if (window.myChart) {
+        window.myChart.destroy();
+    }
+
+    // Get the canvas element
+    const ctx = document.getElementById('chartCanvas').getContext('2d');
+
+    // Define the chart type and configuration
+    const config = {
+        type: type === 'line' ? 'line' : 'bar',
+        data: {
+            labels: labels, // x-axis labels
+            datasets: [{
+                label: 'Dataset',
+                data: values, // y-axis values
+                backgroundColor: type === 'line' ? 'rgba(0, 123, 255, 0.2)' : 'rgba(0, 123, 255, 0.8)',
+                borderColor: 'rgba(0, 123, 255, 1)',
+                borderWidth: 2,
+                fill: type === 'line' // Fill under the line for line charts
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'X-Axis'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Y-Axis'
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    };
+
+    // Render the chart
+    window.myChart = new Chart(ctx, config);
+}
+
+    </script>
+</body>
+
+</html>
