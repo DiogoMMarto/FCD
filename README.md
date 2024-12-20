@@ -1,6 +1,18 @@
 # FCD
 Project for FCD ( Fundamentos de Ciência de Dados) from University of Aveiro 2024/25.
 
+# Run 
+
+To run website and neo4j:
+```
+$ docker compose up -d
+```
+
+To build dataset and insert into neo4j: (you dont need to specificy all steps for example you can do -s 4 do only insert into neo4j if you have the necessary files)
+```
+$ python3 run.py -s 1 2 3 4
+```
+
 # Run neo4j (with Docker)
 
 1. Install docker desktop from [here](https://www.docker.com/products/docker-desktop/).

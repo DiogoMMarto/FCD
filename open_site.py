@@ -49,7 +49,7 @@ def parse_url(url_original:str) -> tuple[str,str,str,str]:
     if len(url_split) > 6:
         raise Exception(f"Invalid url: {url}")
     date = url_split[2] + "/" + url_split[1] + "/" + url_split[0]
-    category = url_split[3]
+    category = url_split[3].lower().capitalize()
     if url_split[4] != "noticia":
         raise Exception(f"Invalid url: {url}")
     title = url_split[5]
@@ -120,7 +120,7 @@ def extract_urls(content:str) -> set[str]:
 
 DO_NLP_PROCCESSING = False
 def process_site(_url,d,number) -> tuple[str,list[int]]:
-    url_file , _ = open_site(_url, True)
+    url_file , _ = open_site(_url, cached=False)
     urls = extract_urls(url_file)
     connections = []
     for url in urls:
@@ -152,6 +152,7 @@ def process_filtered_sites(d,n = 0):
                 time.sleep(60)
             except Exception as e:
                 print(f"\n[ERROR] {url} {e} ")
+                time.sleep(60)
         return None  # Return None if all retries fail
 
     with ThreadPoolExecutor(max_workers=32) as executor:

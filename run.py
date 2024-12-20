@@ -51,7 +51,7 @@ def step_3(l):
         with open(".cache/filtered_and_connections.json","w",encoding="utf-8") as f:
             f.write(json.dumps(l2))
 
-    l2 = process_filtered_sites(l,0,save_callback=save)
+    l2 = process_filtered_sites(l,0)
     with open(".cache/filtered_and_connections.json","w",encoding="utf-8") as f:
             f.write(json.dumps(l2))
     with open(".cache/filtered_and_connections.json","r",encoding="utf-8") as f:
@@ -68,7 +68,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s","--steps", nargs="+", help="Choose steps to run.")
     args = parser.parse_args()
-
+    if not args.steps:
+        parser.print_help()
+        exit()
     if "1" in args.steps:
         step_1()
     if "2" in args.steps:
